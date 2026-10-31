@@ -1,0 +1,340 @@
+{
+  "name": "Project Phantasm — Zombie Credential Exorcist",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "phantasm-exorcism",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [220, 320],
+      "webhookId": "phantasm-exorcism"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Payload validation ---\n// Validate that the incoming payload contains the required keys.\nconst body = $input.first().json;\nconst required = ['incident_id', 'user_id', 'telemetry', 'assessment'];\nconst missing = required.filter(k => !(k in body));\nif (missing.length) {\n  throw new Error('Missing required keys: ' + missing.join(', '));\n}\n\nconst t = body.telemetry;\nconst telemetryFields = ['email','role','account_type','last_active_days','accessed_resources','failed_login_attempts','location_anomaly','privilege_level'];\nconst tm = telemetryFields.filter(k => !(k in t));\nif (tm.length) {\n  throw new Error('Telemetry missing: ' + tm.join(', '));\n}\n\nreturn [{\n  json: {\n    ...body,\n    validation: { ok: true, validated_at: new Date().toISOString() }\n  }\n}];"
+      },
+      "id": "payload-validation",
+      "name": "Payload Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Data preparation ---\n// Build the prompt payload Gemini expects.\nconst item = $input.first().json;\nconst t = item.telemetry;\nconst a = item.assessment || {};\n\nconst prompt = `Assess the following security telemetry for a single user account. Return ONLY the JSON object defined by the schema — no commentary, no markdown fences.\n\nEmail: ${t.email}\nRole: ${t.role}\nAccount type: ${t.account_type}\nPrivilege level: ${t.privilege_level}\nDays since last activity: ${t.last_active_days}\nFailed login attempts: ${t.failed_login_attempts}\nLocation anomaly detected: ${t.location_anomaly}\nAccessed resources: ${(t.accessed_resources || []).join(', ') || 'none'}\n\nScore 0-100 with justification and a recommended action.`;\n\nreturn [{\n  json: {\n    ...item,\n    gemini_request: {\n      contents: [{ role: 'user', parts: [{ text: prompt }] }],\n      generationConfig: {\n        temperature: 0.1,\n        maxOutputTokens: 1024,\n        responseMimeType: 'application/json'\n      }\n    }\n  }\n}];"
+      },
+      "id": "data-prep",
+      "name": "Data Preparation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/models/' + ($env.GEMINI_MODEL || 'gemini-2.5-flash') + ':generateContent?key=' + $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.gemini_request) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "gemini-request",
+      "name": "Gemini API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 320],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Gemini response parsing ---\n// Extract the candidate text and parse as JSON.\nconst item = $input.first().json;\nconst candidates = item.candidates || [];\nif (!candidates.length) throw new Error('Gemini returned no candidates');\nconst text = candidates[0].content?.parts?.[0]?.text || '';\nif (!text) throw new Error('Gemini returned empty text');\n\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (e) {\n  throw new Error('Gemini response is not valid JSON: ' + text.slice(0, 200));\n}\n\nreturn [{\n  json: {\n    ...item,\n    gemini_assessment: parsed\n  }\n}];"
+      },
+      "id": "gemini-parse",
+      "name": "Gemini Response Parsing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Threat score validation ---\nconst item = $input.first().json;\nconst a = item.gemini_assessment || {};\nconst errors = [];\n\nif (typeof a.threat_score !== 'number' || a.threat_score < 0 || a.threat_score > 100) {\n  errors.push('threat_score out of range');\n}\nif (!['LOW','MEDIUM','HIGH','CRITICAL'].includes(a.risk_category)) {\n  errors.push('invalid risk_category');\n}\nif (!['MONITOR','FLAG','REQUIRE_REVOCATION_APPROVAL','REVOKE_IMMEDIATELY'].includes(a.recommended_action)) {\n  errors.push('invalid recommended_action');\n}\nif (typeof a.reasoning !== 'string' || a.reasoning.length < 10) {\n  errors.push('reasoning missing/too short');\n}\n\nreturn [{\n  json: {\n    ...item,\n    validation: {\n      ...item.validation,\n      gemini_valid: errors.length === 0,\n      errors: errors\n    }\n  }\n}];"
+      },
+      "id": "score-validation",
+      "name": "Threat Score Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Risk classification ---\nconst item = $input.first().json;\nconst a = item.gemini_assessment || item.assessment || {};\nconst score = a.threat_score || 0;\nlet category;\nif (score >= 75) category = 'CRITICAL';\nelse if (score >= 50) category = 'HIGH';\nelse if (score >= 25) category = 'MEDIUM';\nelse category = 'LOW';\n\nreturn [{\n  json: {\n    ...item,\n    classification: { score, category, recommended_action: a.recommended_action || 'MONITOR' }\n  }\n}];"
+      },
+      "id": "risk-classification",
+      "name": "Risk Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 320]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.classification.category }}",
+        "rules": {
+          "rules": [
+            { "value2": "CRITICAL", "outputKey": "critical" },
+            { "value2": "HIGH", "outputKey": "high" },
+            { "value2": "MEDIUM", "outputKey": "medium" },
+            { "value2": "LOW", "outputKey": "low" }
+          ]
+        },
+        "fallbackOutput": 0
+      },
+      "id": "conditional-branch",
+      "name": "Conditional Branching",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [1760, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// HIGH/CRITICAL branch — request human approval in live mode.\n// In simulation mode, mock revocation proceeds automatically.\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    iam_action: {\n      mode: item.assessment?.simulation_mode ? 'SIMULATION' : 'LIVE',\n      action: item.assessment?.simulation_mode ? 'REVOKED' : 'PENDING_APPROVAL',\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "human-approval-handling",
+      "name": "Human Approval Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Mock IAM revocation — simulates disabling the account.\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    iam_result: {\n      previous_status: 'ACTIVE',\n      new_status: 'REVOKED',\n      revoked_at: new Date().toISOString(),\n      incident_id: item.incident_id,\n      approver: item.assessment?.simulation_mode ? 'simulation-engine' : null\n    }\n  }\n}];"
+      },
+      "id": "mock-iam-revocation",
+      "name": "Mock IAM Revocation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// LOW/MEDIUM branch — flag the account for monitoring.\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    iam_action: {\n      action: item.classification.category === 'MEDIUM' ? 'FLAGGED' : 'MONITORED',\n      timestamp: new Date().toISOString()\n    }\n  }\n}];"
+      },
+      "id": "monitor-account",
+      "name": "Monitor Account",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 440]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "google-sheets-audit",
+      "name": "Google Sheets Audit Logging",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2420, 320],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "GOOGLE_SHEETS_CREDENTIAL_ID",
+          "name": "Google Sheets OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "={{ $env.GMAIL_RECIPIENT }}",
+        "subject": "={{ '[PHANTASM] ' + ($json.classification?.category || 'UNKNOWN') + ' incident — ' + ($json.telemetry?.email || '?') }}",
+        "emailType": "text",
+        "message": "={{ 'PROJECT PHANTASM\\n================\\n\\nIncident: ' + $json.incident_id + '\\nUser: ' + $json.telemetry?.email + '\\nScore: ' + $json.classification?.score + '/100\\nCategory: ' + $json.classification?.category + '\\nAction: ' + $json.iam_action?.action + '\\n\\nReasoning:\\n' + ($json.gemini_assessment?.reasoning || $json.assessment?.reasoning || 'N/A') + '\\n\\nEpitaph:\\n' + ($json.gemini_assessment?.epitaph_summary || $json.assessment?.epitaph_summary || '') + '\\n' }}",
+        "options": {}
+      },
+      "id": "gmail-notification",
+      "name": "Gmail Incident Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2640, 320],
+      "credentials": {
+        "gmailOAuth2Api": {
+          "id": "GMAIL_CREDENTIAL_ID",
+          "name": "Gmail OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// --- Error handling ---\n// Capture any prior node failure and report it cleanly.\nconst item = $input.first().json;\nreturn [{\n  json: {\n    incident_id: item.incident_id,\n    user_id: item.user_id,\n    error: item.error || 'Pipeline failed',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "error-handling",
+      "name": "Error Handling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 540],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  incident_id: $json.incident_id,\n  status: 'completed',\n  classification: $json.classification,\n  iam_action: $json.iam_action || $json.iam_result,\n  timestamp: new Date().toISOString()\n}) }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Workflow Completion Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2860, 320]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          { "node": "Payload Validation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Payload Validation": {
+      "main": [
+        [
+          { "node": "Data Preparation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Data Preparation": {
+      "main": [
+        [
+          { "node": "Gemini API Request", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini API Request": {
+      "main": [
+        [
+          { "node": "Gemini Response Parsing", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini Response Parsing": {
+      "main": [
+        [
+          { "node": "Threat Score Validation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Threat Score Validation": {
+      "main": [
+        [
+          { "node": "Risk Classification", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Risk Classification": {
+      "main": [
+        [
+          { "node": "Conditional Branching", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Conditional Branching": {
+      "main": [
+        [
+          { "node": "Human Approval Handling", "type": "main", "index": 0 },
+          { "node": "Monitor Account", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Human Approval Handling": {
+      "main": [
+        [
+          { "node": "Mock IAM Revocation", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Mock IAM Revocation": {
+      "main": [
+        [
+          { "node": "Google Sheets Audit Logging", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Monitor Account": {
+      "main": [
+        [
+          { "node": "Google Sheets Audit Logging", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Google Sheets Audit Logging": {
+      "main": [
+        [
+          { "node": "Gmail Incident Notification", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gmail Incident Notification": {
+      "main": [
+        [
+          { "node": "Workflow Completion Response", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Error Handling": {
+      "main": [
+        [
+          { "node": "Workflow Completion Response", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "active": false,
+  "tags": [
+    {
+      "name": "phantasm",
+      "createdAt": "2026-10-31T00:00:00.000Z",
+      "updatedAt": "2026-10-31T00:00:00.000Z"
+    }
+  ]
+}

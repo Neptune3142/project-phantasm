@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root { color-scheme: dark; }
+  html, body, #root { height: 100%; }
+  body {
+    background: radial-gradient(circle at 20% -10%, rgba(124, 58, 237, 0.18), transparent 55%),
+                radial-gradient(circle at 85% 0%,  rgba(34, 197, 94, 0.08), transparent 50%),
+                #0B0710;
+    color: theme('colors.phantom.text');
+    font-family: theme('fontFamily.sans');
+    min-height: 100vh;
+  }
+  ::selection { background: rgba(124, 58, 237, 0.4); color: #fff; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: #0B0710; }
+  ::-webkit-scrollbar-thumb { background: #2A1F3C; border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3B2A55; }
+}
+
+@layer components {
+  .card {
+    @apply bg-phantom-panel border border-phantom-border rounded-xl p-5
+           transition-colors duration-200;
+  }
+  .card-hover { @apply hover:border-phantom-purple/60 transition-colors; }
+  .btn {
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+           transition-all duration-150 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-phantom-purple text-white hover:bg-phantom-purpleBri
+           shadow-glow-purple;
+  }
+  .btn-danger {
+    @apply btn bg-phantom-red text-white hover:bg-phantom-redBri shadow-glow-red;
+  }
+  .btn-success {
+    @apply btn bg-phantom-green text-phantom-bg hover:bg-phantom-greenBri
+           shadow-glow-green font-semibold;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-phantom-textDim border border-phantom-border
+           hover:bg-phantom-panel2 hover:text-phantom-text;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs
+           font-mono uppercase tracking-wider;
+  }
+  .chip-low { @apply chip bg-phantom-green/15 text-phantom-greenBri; }
+  .chip-medium { @apply chip bg-phantom-amber/15 text-phantom-amber; }
+  .chip-high { @apply chip bg-phantom-red/20 text-phantom-redBri; }
+  .chip-critical {
+    @apply chip bg-phantom-red/30 text-phantom-redBri font-bold
+           ring-1 ring-phantom-red/40 animate-pulse-glow;
+  }
+  .input {
+    @apply w-full bg-phantom-bg border border-phantom-border rounded-lg
+           px-3 py-2 text-sm text-phantom-text placeholder-phantom-textDim
+           focus:outline-none focus:ring-2 focus:ring-phantom-purple/60
+           focus:border-phantom-purple/60 transition;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wider text-phantom-textDim;
+  }
+  .divider { @apply h-px bg-phantom-border w-full my-4; }
+  .stat-num {
+    @apply font-display text-3xl font-semibold tracking-tight;
+  }
+  .section-title {
+    @apply font-display text-lg font-semibold text-phantom-text;
+  }
+  .subsection-title {
+    @apply text-sm font-semibold text-phantom-textDim uppercase tracking-wider;
+  }
+}
+
+.risk-LOW { color: theme('colors.phantom.greenBri'); }
+.risk-MEDIUM { color: theme('colors.phantom.amber'); }
+.risk-HIGH { color: theme('colors.phantom.redBri'); }
+.risk-CRITICAL { color: theme('colors.phantom.redBri'); }
+
+.fog {
+  background-image:
+    radial-gradient(ellipse at 30% 100%, rgba(124, 58, 237, 0.08), transparent 60%),
+    radial-gradient(ellipse at 70% 100%, rgba(34, 197, 94, 0.04), transparent 60%);
+  background-attachment: fixed;
+}
+
+/* Subtle spooky grid overlay used in the dashboard header */
+.spooky-grid::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(124, 58, 237, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124, 58, 237, 0.06) 1px, transparent 1px);
+  background-size: 28px 28px;
+  pointer-events: none;
+  mask-image: radial-gradient(circle at 50% 0%, black, transparent 75%);
+}
