@@ -39,6 +39,7 @@ class UserAccountOut(BaseModel):
     location_anomaly: bool
     privilege_level: str
     account_status: str
+    deactivation_reason: Optional[str] = None
     created_at: Optional[datetime] = None
 
 

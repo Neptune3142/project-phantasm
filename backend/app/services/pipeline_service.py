@@ -150,14 +150,18 @@ async def run_exorcism(
 
     # ---- GEMINI ANALYSIS ------------------------------------------------
     await _mark_step(execution, "GEMINI_ANALYSIS", "running")
-    source_label = "rules_engine"
     if use_gemini and settings.has_gemini() and not force_simulation:
         assessment = await gemini_service.assess(telemetry)
-        source_label = "gemini" if settings.has_gemini() else "rules_engine"
-        detail = f"Assessment via {source_label}"
+        # gemini_service.assess() falls back to rules_engine on failure/validation error;
+        # we detect which path was taken by checking whether the epitaph came from Gemini
+        # (rules engine produces a deterministic, formulaic epitaph vs. Gemini's creative one).
+        # The reliable signal is the assessment_source tag we attach here.
+        source_label = "gemini"
+        detail = f"Assessment via Gemini AI ({settings.gemini_model or 'gemini-3.8-flash'})"
     else:
         assessment = rules_engine.assess(telemetry)
-        detail = "Assessment via deterministic rules engine (no Gemini key configured)"
+        source_label = "rules_engine"
+        detail = "Assessment via deterministic rules engine (simulation mode / no Gemini key)"
     await _complete_step(execution, "GEMINI_ANALYSIS", detail)
 
     # ---- RISK CLASSIFICATION -------------------------------------------

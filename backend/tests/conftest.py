@@ -37,7 +37,7 @@ def client(app):
 
 
 @pytest.fixture(autouse=True)
-def _reset_db():
+def _reset_db(client):  # noqa: F811 — depends on client so DB is initialised first
     """Each test starts with a clean slate — delete all rows from each table."""
     import asyncio
     from app.database import AsyncSessionLocal, engine
@@ -52,5 +52,5 @@ def _reset_db():
             await s.execute(delete(UserAccount))
             await s.commit()
 
-    asyncio.get_event_loop().run_until_complete(_wipe())
+    asyncio.run(_wipe())
     yield

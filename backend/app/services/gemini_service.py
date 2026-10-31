@@ -118,7 +118,7 @@ class GeminiService:
                 "suggestion": "Create a key at https://aistudio.google.com/app/apikey "
                               "and add it in Settings → Integrations.",
             }
-        model = self.settings.gemini_model or "gemini-2.5-flash"
+        model = self.settings.gemini_model or "gemini-3.8-flash"
         url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={self.settings.gemini_api_key}"
         body = {
             "contents": [
@@ -155,7 +155,7 @@ class GeminiService:
     # ------------------------------------------------------------------
     async def _call_gemini(self, telemetry: UserTelemetryIn) -> dict:
         """Call the Gemini REST endpoint with retry + structured output."""
-        model = self.settings.gemini_model or "gemini-2.5-flash"
+        model = self.settings.gemini_model or "gemini-3.8-flash"
         url = f"{GEMINI_BASE_URL}/{model}:generateContent?key={self.settings.gemini_api_key}"
         body = {
             "contents": [

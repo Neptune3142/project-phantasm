@@ -139,7 +139,7 @@ def test_7_unauthorised_live_revocation_rejected():
                 )
             await s.rollback()
 
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 # TEST 8: Restart the application → historical database records persist.

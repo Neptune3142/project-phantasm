@@ -41,7 +41,7 @@ def test_simulation_revocation_sets_status():
             await s.commit()
             result = await s.execute(select(UserAccount).where(UserAccount.user_id == u.user_id))
             return result.scalar_one()
-    out = asyncio.get_event_loop().run_until_complete(_run())
+    out = asyncio.run(_run())
     assert out.account_status == "REVOKED"
 
 
@@ -59,7 +59,7 @@ def test_live_revocation_without_provider_rejected():
                     approved=True,
                 )
             await s.rollback()
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_live_revocation_without_approval_rejected():
@@ -76,7 +76,7 @@ def test_live_revocation_without_approval_rejected():
                     approved=False,
                 )
             await s.rollback()
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_unknown_user_revocation_rejected():
@@ -90,7 +90,7 @@ def test_unknown_user_revocation_rejected():
                     reason="missing user",
                     approved=True,
                 )
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())
 
 
 def test_flag_then_monitor_state_transitions():
@@ -105,4 +105,4 @@ def test_flag_then_monitor_state_transitions():
             await s.flush()
             assert u.account_status == "MONITORED"
             await s.rollback()
-    asyncio.get_event_loop().run_until_complete(_run())
+    asyncio.run(_run())

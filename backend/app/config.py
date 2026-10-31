@@ -49,7 +49,7 @@ class Settings(BaseSettings):
 
     # --- Gemini ---
     gemini_api_key: Optional[str] = Field(default=None)
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-3.8-flash")
 
     # --- n8n ---
     n8n_base_url: Optional[str] = Field(default=None)

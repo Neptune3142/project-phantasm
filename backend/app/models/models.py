@@ -34,6 +34,7 @@ class UserAccount(Base):
     location_anomaly: Mapped[bool] = mapped_column(Boolean, default=False)
     privilege_level: Mapped[str] = mapped_column(String(64), default="standard")
     account_status: Mapped[str] = mapped_column(String(32), default="ACTIVE")
+    deactivation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
@@ -51,6 +52,7 @@ class UserAccount(Base):
             "location_anomaly": self.location_anomaly,
             "privilege_level": self.privilege_level,
             "account_status": self.account_status,
+            "deactivation_reason": self.deactivation_reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

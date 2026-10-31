@@ -25,7 +25,7 @@ def test_no_gemini_key_falls_back_to_rules_engine():
     from app.config import Settings
     s = Settings(gemini_api_key=None)
     svc = GeminiService(settings=s)
-    out = asyncio.get_event_loop().run_until_complete(svc.assess(_telemetry()))
+    out = asyncio.run(svc.assess(_telemetry()))
     expected = rules_engine.assess(_telemetry())
     assert out.threat_score == expected.threat_score
     assert out.risk_category == expected.risk_category
@@ -34,7 +34,7 @@ def test_no_gemini_key_falls_back_to_rules_engine():
 def test_connection_test_returns_helpful_message_without_key():
     from app.config import Settings
     svc = GeminiService(settings=Settings(gemini_api_key=None))
-    result = asyncio.get_event_loop().run_until_complete(svc.test_connection())
+    result = asyncio.run(svc.test_connection())
     assert result["connected"] is False
     assert "GEMINI_API_KEY" in result["detail"]
 

@@ -44,6 +44,7 @@ class IAMService:
     async def flag(self, session: AsyncSession, user_id: str, reason: str) -> UserAccount:
         account = await self._get_user(session, user_id)
         account.account_status = AccountStatus.FLAGGED.value
+        account.deactivation_reason = reason
         account.updated_at = datetime.now(timezone.utc)
         await session.flush()
         logger.info("Flagged user %s (%s).", user_id, reason)
@@ -52,6 +53,7 @@ class IAMService:
     async def monitor(self, session: AsyncSession, user_id: str, reason: str) -> UserAccount:
         account = await self._get_user(session, user_id)
         account.account_status = AccountStatus.MONITORED.value
+        account.deactivation_reason = reason
         account.updated_at = datetime.now(timezone.utc)
         await session.flush()
         logger.info("Monitoring user %s (%s).", user_id, reason)
@@ -60,6 +62,7 @@ class IAMService:
     async def request_approval(self, session: AsyncSession, user_id: str, reason: str) -> UserAccount:
         account = await self._get_user(session, user_id)
         account.account_status = AccountStatus.PENDING_APPROVAL.value
+        account.deactivation_reason = reason
         account.updated_at = datetime.now(timezone.utc)
         await session.flush()
         logger.info("Approval requested for user %s (%s).", user_id, reason)
@@ -93,6 +96,7 @@ class IAMService:
 
         previous = account.account_status
         account.account_status = AccountStatus.REVOKED.value
+        account.deactivation_reason = reason
         account.updated_at = datetime.now(timezone.utc)
         # Audit trail in metadata
         account.__dict__["_revocation_audit"] = {
